@@ -1,17 +1,27 @@
-import bcrypt from "bcrypt";
-import { v4 as uuid } from "uuid";
-import { db } from "../dbStrategy/mongo.js";
-import joi from "joi";
+import bcrypt from 'bcrypt';
+import { v4 as uuid } from 'uuid';
+import {db} from '../dbStrategy/mongo.js';
+import joi from 'joi';
 
 export async function registerUser(req, res) {
-  const user = req.body;
-
+  const body = req.body;
+  console.log(body);
+  
+  if(req.body.password!==req.body.confirmPassword){
+    return res.sendStatus(422);
+  }
   const userSchema = joi.object({
     name: joi.string().required(),
     email: joi.string().email().required(),
     password: joi.string().required(),
   });
 
+  const user = {
+    name: body.name,
+    email: body.email,
+    password: body.password
+  }
+  
   const { error } = userSchema.validate(user);
 
   if (error) {
@@ -20,37 +30,36 @@ export async function registerUser(req, res) {
 
   const encryptedPassword = bcrypt.hashSync(user.password, 10);
 
-  await db
-    .collection("users")
-    .insertOne({ ...user, password: encryptedPassword });
-  res.status(201).send("Usuário criado com sucesso");
+  await db.collection('users').insertOne({ ...user, password: encryptedPassword});
+  res.status(201).send('Usuário criado com sucesso');
 }
 
 export async function loginUser(req, res) {
-  const userInfo = req.body;
+  const user = req.body;
 
   const userSchema = joi.object({
     email: joi.string().email().required(),
-    password: joi.string().required(),
+    password: joi.string().required()
   });
 
-  const { error } = userSchema.validate(userInfo);
+  const { error } = userSchema.validate(user);
 
   if (error) {
     return res.sendStatus(422);
   }
 
-  const user = await db.collection("users").findOne({ email: userInfo.email });
-  if (user && bcrypt.compareSync(userInfo.password, user.password)) {
+  const userdb = await db.collection('users').findOne({ email: user.email });
+
+  if (userdb && bcrypt.compareSync(user.password, userdb.password)) {
     const token = uuid();
 
-    await db.collection("sessions").insertOne({
+    await db.collection('sessions').insertOne({
       token,
-      userId: user._id,
+      userId: userdb._id
     });
-
-    return res.status(201).send({ token });
+    const name=userdb.name;
+    return res.status(201).send({ token, name});
   } else {
-    return res.status(401).send("Senha ou email incorretos!");
+    return res.status(401).send('Senha ou email incorretos!');
   }
 }
